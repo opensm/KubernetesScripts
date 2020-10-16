@@ -56,9 +56,19 @@ def main():
         if '-r' in command_dict:
             command_data['replicas'] = command_dict.get("-r")
         if d.complete(**command_data):
-            dingding_str = "更新提示：\n\t更新环境:{0}\n\t命名空间:{1}\n\t服务:{2}\n\t版本号:{3}\n\t状态:更新成功"
+            dingding_str = "更新提示：\n\t更新环境:{0}\n\t命名空间:{1}\n\t服务:{2}\n\t版本号:{3}\n\t状态:更新成功".format(
+                command_data['env'],
+                command_data['namespace'],
+                command_data['service'],
+                command_data['version']
+            )
         else:
-            dingding_str = "更新提示：\n\t更新环境:{0}\n\t命名空间:{1}\n\t服务:{2}\n\t版本号:{3}\n\t状态:更新失败"
+            dingding_str = "更新提示：\n\t更新环境:{0}\n\t命名空间:{1}\n\t服务:{2}\n\t版本号:{3}\n\t状态:更新失败".format(
+                command_data['env'],
+                command_data['namespace'],
+                command_data['service'],
+                command_data['version']
+            )
         d.send_alert(content=dingding_str)
     elif ["-m"] == command_dict.keys():
         d.show_middleware()
