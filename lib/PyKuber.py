@@ -481,12 +481,13 @@ class PyKuber:
             # 读取已经存在的yaml文件
             service_yaml = self.read_yaml(achieve=service_achieve)
             # 执行已经存在的yaml文件内容
-            self.apply_service(
-                data=service_yaml,
-                namespace=namespace,
-                env=env,
-                name=service_name
-            )
+            if not self.apply_service(
+                    data=service_yaml,
+                    namespace=namespace,
+                    env=env,
+                    name=service_name
+            ):
+                return False
             return True
         for port in ports:
             if port_type == "NodePort":
@@ -519,12 +520,13 @@ class PyKuber:
             RecodeLog.error(msg="生成yaml文件失败：{0}".format(service_yaml))
             # raise Exception("生成yaml文件失败：{0}".format(service_yaml))
             return False
-        self.apply_service(
-            data=service_yaml,
-            namespace=namespace,
-            env=env,
-            name=service_name
-        )
+        if not self.apply_service(
+                data=service_yaml,
+                namespace=namespace,
+                env=env,
+                name=service_name
+        ):
+            return False
         return True
 
     def make_deploy_yaml(
