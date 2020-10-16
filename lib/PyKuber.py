@@ -173,7 +173,7 @@ class PyKuber:
             else:
                 v1.create_namespaced_deployment(body=data, namespace=namespace)
             RecodeLog.info(msg="Kubernetes容器更新成功，环境：{0},命名空间：{1},服务：{2}".format(env, name, name))
-            return False
+            return True
         except Exception as error:
             RecodeLog.error(msg="Kubernetes容器更新成功，环境：{0},命名空间：{1},服务：{2}，原因：".format(env, name, name, error))
             return False
@@ -731,7 +731,7 @@ class PyKuber:
                 return False
 
         ports = self.get_port(path=service_path)
-        if self.make_service_yaml(
+        if not self.make_service_yaml(
                 namespace=namespace,
                 service_name=service,
                 port_type=port_type,
@@ -741,7 +741,7 @@ class PyKuber:
         ):
             return False
 
-        if self.make_deploy_yaml(
+        if not self.make_deploy_yaml(
                 namespace=namespace,
                 service_name=service,
                 image_tag=tag,
