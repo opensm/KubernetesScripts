@@ -8,8 +8,8 @@ from collections import Counter
 def useage():
     print("%s -h\t#帮助文档" % sys.argv[0])
     print(
-        "%s -n 命名空间 -s服务名称 -e 所属环境 -v版本号 -t[NodePort|ClusterIP](端口类型) -r副本个数 -a'变量名1|变量名2'\t#部署对应环境代码" %
-        sys.argv[0]
+            "%s -n 命名空间 -s服务名称 -e 所属环境 -v版本号 -t[NodePort|ClusterIP](端口类型) -r副本个数 -a'变量名1|变量名2'\t#部署对应环境代码" %
+            sys.argv[0]
     )
     print("%s -m #查看可支持的中间件列表" % sys.argv[0])
 
@@ -55,7 +55,11 @@ def main():
             command_data['env_args'] = command_dict.get("-a")
         if '-r' in command_dict:
             command_data['replicas'] = command_dict.get("-r")
-        d.complete(**command_data)
+        if d.complete(**command_data):
+            dingding_str = "更新提示：\n\t更新环境:{0}\n\t命名空间:{1}\n\t服务:{2}\n\t版本号:{3}\n\t状态:更新成功"
+        else:
+            dingding_str = "更新提示：\n\t更新环境:{0}\n\t命名空间:{1}\n\t服务:{2}\n\t版本号:{3}\n\t状态:更新失败"
+        d.send_alert(content=dingding_str)
     elif ["-m"] == command_dict.keys():
         d.show_middleware()
     else:

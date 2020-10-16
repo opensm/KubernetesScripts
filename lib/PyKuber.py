@@ -1,15 +1,31 @@
 # -*- coding: utf-8 -*-
+import base64
+import glob
+import hashlib
+import hmac
+import json
+import os
+import shutil
+import sys
+import time
+import urllib
+from xml.dom.minidom import parse
+
+import docker
+import requests
 import yaml
 from kubernetes import config, client
-import docker
-import os
-import sys
-from lib.setting import KEY_DIR, WORKSPACE, HARBOR_URL, MIDDLEWARE, DEPLOY_YAML_DIR, SERVICE_YAML_DIR, SRC_POM_DIR, \
-    FRONT_DOCKERFILE_PATH
-import glob
-import shutil
+
 from lib.Log import RecodeLog
-from xml.dom.minidom import parse
+from lib.setting import KEY_DIR, \
+    WORKSPACE, \
+    HARBOR_URL, \
+    MIDDLEWARE, \
+    DEPLOY_YAML_DIR, \
+    SERVICE_YAML_DIR, \
+    SRC_POM_DIR, \
+    DINGDING_SECRET, \
+    DINGDING_TOKEN
 
 if sys.version_info < (3, 0):
     reload(sys)
@@ -149,12 +165,18 @@ class PyKuber:
         :return:
         """
         env_yaml = os.path.join(KEY_DIR, "{0}.yaml".format(env))
-        self.login(key_file=env_yaml)
-        v1 = client.AppsV1Api()
-        if self.check_deploy(namespace=namespace, env=env, deploy=name):
-            v1.patch_namespaced_deployment(body=data, namespace=namespace, name=name)
-        else:
-            v1.create_namespaced_deployment(body=data, namespace=namespace)
+        try:
+            self.login(key_file=env_yaml)
+            v1 = client.AppsV1Api()
+            if self.check_deploy(namespace=namespace, env=env, deploy=name):
+                v1.patch_namespaced_deployment(body=data, namespace=namespace, name=name)
+            else:
+                v1.create_namespaced_deployment(body=data, namespace=namespace)
+            RecodeLog.info(msg="Kubernetes容器更新成功，环境：{0},命名空间：{1},服务：{2}".format(env, name, name))
+            return False
+        except Exception as error:
+            RecodeLog.error(msg="Kubernetes容器更新成功，环境：{0},命名空间：{1},服务：{2}，原因：".format(env, name, name, error))
+            return False
 
     def apply_service(self, data, namespace, env, name):
         """
@@ -165,12 +187,18 @@ class PyKuber:
         :return:
         """
         env_yaml = os.path.join(KEY_DIR, "{0}.yaml".format(env))
-        self.login(key_file=env_yaml)
-        v1 = client.CoreV1Api()
-        if self.check_service(service=name, namespace=namespace, env=env):
-            v1.patch_namespaced_service(body=data, namespace=namespace, name=name)
-        else:
-            v1.create_namespaced_service(body=data, namespace=namespace)
+        try:
+            self.login(key_file=env_yaml)
+            v1 = client.CoreV1Api()
+            if self.check_service(service=name, namespace=namespace, env=env):
+                v1.patch_namespaced_service(body=data, namespace=namespace, name=name)
+            else:
+                v1.create_namespaced_service(body=data, namespace=namespace)
+            RecodeLog.info(msg="Kubernetes服务生成成功，环境：{0},命名空间：{1},服务：{2}".format(env, name, name))
+            return True
+        except Exception as error:
+            RecodeLog.info(msg="Kubernetes服务生成失败，环境：{0},命名空间：{1},服务：{2}，原因：".format(env, name, name, error))
+            return False
 
     @staticmethod
     def write_yaml(achieve, data):
@@ -488,7 +516,9 @@ class PyKuber:
         )
 
         if not self.write_yaml(achieve=service_achieve, data=service_yaml):
-            raise Exception("生成yaml文件失败：{0}".format(service_yaml))
+            RecodeLog.error(msg="生成yaml文件失败：{0}".format(service_yaml))
+            # raise Exception("生成yaml文件失败：{0}".format(service_yaml))
+            return False
         self.apply_service(
             data=service_yaml,
             namespace=namespace,
@@ -525,7 +555,7 @@ class PyKuber:
         )
         if os.path.exists(deploy_yaml):
             RecodeLog.warn(msg="{0}:文件已经存在，以前可能已经部署过，请检查后再执行！".format(deploy_yaml))
-            return
+            return False
         # 容器内部端口
         container_port = list()
         # container port获取
@@ -544,13 +574,16 @@ class PyKuber:
         )
         # 生成yaml
         if not self.write_yaml(achieve=deploy_yaml, data=deploy_dict):
-            raise Exception("生成yaml文件失败：{0}".format(deploy_yaml))
-        self.apply_deployment(
-            data=deploy_dict,
-            namespace=namespace,
-            env=env,
-            name=service_name
-        )
+            RecodeLog.error(msg="生成yaml文件失败：{0}".format(deploy_yaml))
+            return False
+        if not self.apply_deployment(
+                data=deploy_dict,
+                namespace=namespace,
+                env=env,
+                name=service_name
+        ):
+            return False
+        return True
 
     def format_pom_xml(self, src, dsc, deploy_name):
         """
@@ -661,67 +694,63 @@ class PyKuber:
         backend_app = os.path.join(service_path, 'pom.xml')
         # front_docker_path = os.path.join(service_path, 'docker')
         if os.path.exists(front_app) and os.path.exists(backend_app):
-            RecodeLog.error(msg="{2}.同时出现前端和后端的配置：{0},{1}".format(front_app, backend_app, service))
-            return
-        elif os.path.exists(front_app) and not os.path.exists(backend_app):
+            RecodeLog.error(msg="{2}.同时出现前端和后端的配置：{0},{1}".format(
+                front_app, backend_app, service
+            ))
+            return False
+        elif os.path.exists(front_app):
             RecodeLog.info(msg="{0},应用为前端应用,开始编译....".format(service))
             exec_npm_str = "cd {0} && yarn".format(service_path)
             if env in ['qa', 'dev']:
                 exec_npm_run_str = "cd {0} && yarn build:{1}".format(service_path, env)
             else:
                 exec_npm_run_str = "cd {0} && yarn build".format(service_path, env)
-            # exec_mvn_str = "cd {0} && mvn -B -f ./pom.xml clean install -Dmaven.test.skip=true".format(
-            #     front_docker_path
-            # )
-            # 拷贝以及准备相关的镜像制作依赖文件
-            # self.front_build_pre(path=front_docker_path, dockerfile_path=FRONT_DOCKERFILE_PATH, deploy_name=service)
+            try:
+                self.exec_command(command=exec_npm_str)
+                RecodeLog.info("执行编译成功：{0}".format(exec_npm_str))
+                self.exec_command(command=exec_npm_run_str)
+                RecodeLog.info("执行编译成功：{0}".format(exec_npm_run_str))
+                self.docker_image_build(path=service_path, tag=tag, version=version)
+                RecodeLog.info(msg="生成前端镜像成功:{0}:{1}".format(tag, version))
+                self.docker_image_push(repository="{0}:{1}".format(tag, version))
+                RecodeLog.info(msg="推送前端镜像成功:{0}:{1}".format(tag, version))
+            except Exception as error:
+                RecodeLog.error("执行编译异常，原因：{0}".format(error))
+                return False
+        elif env in ['dev'] and os.path.exists(backend_app):
 
-            # 执行安装依赖
-            if not self.exec_command(command=exec_npm_str):
-                raise Exception("执行编译异常：{0}".format(exec_npm_str))
-            # 编译前端内容
-            if not self.exec_command(command=exec_npm_run_str):
-                raise Exception("执行编译异常：{0}".format(exec_npm_run_str))
-            # # tomcat 编译安装
-            # if not self.exec_command(command=exec_mvn_str):
-            #     raise Exception("执行编译异常：{0}".format(exec_mvn_str))
+            try:
+                self.docker_image_build(path=service_path, tag=tag, version=version)
+                RecodeLog.info(msg="生成后端镜像成功:{0}:{1}".format(tag, version))
+                self.docker_image_push(repository="{0}:{1}".format(tag, version))
+                RecodeLog.info(msg="推送后端镜像成功:{0}:{1}".format(tag, version))
+            except Exception as error:
+                RecodeLog.error("执行编译异常，原因：{0}".format(error))
+                return False
 
-            # shutil.copytree(
-            #     src=os.path.join(service_path, 'dist'),
-            #     dst=os.path.join(front_docker_path, 'src/main/resources/static')
-            # )
+        ports = self.get_port(path=service_path)
+        if self.make_service_yaml(
+                namespace=namespace,
+                service_name=service,
+                port_type=port_type,
+                ports=ports,
+                exist_node_port=node_port,
+                env=env
+        ):
+            return False
 
-        # 打包镜像后端
-        if env in ['dev'] and os.path.exists(backend_app):
-            self.docker_image_build(path=service_path, tag=tag, version=version)
-            self.docker_image_push(repository="{0}:{1}".format(tag, version))
-            ports = self.get_port(path=service_path)
-        # 打包镜像前端
-        elif os.path.exists(front_app):
-            self.docker_image_build(path=service_path, tag=tag, version=version)
-            self.docker_image_push(repository="{0}:{1}".format(tag, version))
-            ports = self.get_port(path=service_path)
-        else:
-            RecodeLog.error(msg="编译类型错误，不在支持的编译类型中，请检查！")
-            raise Exception("编译类型错误，不在支持的编译类型中，请检查！")
-        self.make_service_yaml(
-            namespace=namespace,
-            service_name=service,
-            port_type=port_type,
-            ports=ports,
-            exist_node_port=node_port,
-            env=env
-        )
-        self.make_deploy_yaml(
-            namespace=namespace,
-            service_name=service,
-            image_tag=tag,
-            ports=ports,
-            env=env,
-            env_args=env_args,
-            version=version,
-            replicas=replicas
-        )
+        if self.make_deploy_yaml(
+                namespace=namespace,
+                service_name=service,
+                image_tag=tag,
+                ports=ports,
+                env=env,
+                env_args=env_args,
+                version=version,
+                replicas=replicas
+        ):
+            return False
+        return True
 
     @staticmethod
     def show_middleware():
@@ -753,3 +782,33 @@ class PyKuber:
             else:
                 continue
         return port
+
+    @staticmethod
+    def send_alert(content):
+        data = {
+            "msgtype": "text",
+            "text": {
+                "content": content
+            },
+            "at": {
+                "isAtAll": False
+            }
+        }
+
+        headers = {'Content-Type': 'application/json'}
+        timestamps = long(round(time.time() * 1000))
+        url = "https://oapi.dingtalk.com/robot/send?access_token={0}".format(
+            DINGDING_TOKEN)  # 说明：这里改为自己创建的机器人的webhook的值
+        secret_enc = bytes(DINGDING_SECRET).encode('utf-8')
+        to_sign = '{}\n{}'.format(timestamps, DINGDING_SECRET)
+        to_sign_enc = bytes(to_sign).encode('utf-8')
+        hmac_code = hmac.new(secret_enc, to_sign_enc, digestmod=hashlib.sha256).digest()
+        sign = urllib.quote_plus(base64.b64encode(hmac_code))
+        url = "{0}&timestamp={1}&sign={2}".format(url, timestamps, sign)
+        try:
+            x = requests.post(url=url, data=json.dumps(data), headers=headers)
+            if x.json()["errcode"] != 0:
+                raise Exception(x.content)
+            RecodeLog.info(msg="发送报警成功,url:{0},报警内容:{1}".format(url, data))
+        except Exception as error:
+            RecodeLog.info(msg="发送报警失败,url:{0},报警内容:{1},原因:{2}".format(url, data, error))

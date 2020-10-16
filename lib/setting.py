@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import os
 
+# Kubernetes 配置
 HARBOR_URL = "harbor.nccc.site/nccc/"
 WORKSPACE = "/var/lib/jenkins/workspace/"
 DEPLOY_YAML_DIR = "/data/yaml/deploy"
@@ -8,12 +9,13 @@ SERVICE_YAML_DIR = "/data/yaml/service"
 KEY_DIR = "/data/kube"
 
 SRC_POM_DIR = os.path.join(os.path.dirname(__file__), 'pom.xml')
-FRONT_DOCKERFILE_PATH = os.path.join(os.path.dirname(__file__), 'front_dockerfile_module')
-
+# 日志配置
 LOG_DIR = "/tmp"
 LOG_FILE = "python_deploy.log"
 LOG_LEVEL = "INFO"
-
+# 钉钉告警配置
+DINGDING_TOKEN = ""
+DINGDING_SECRET = ""
 # 中间件列表
 MIDDLEWARE = {
     "rest_file": {
