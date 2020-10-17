@@ -719,6 +719,8 @@ class PyKuber:
                 RecodeLog.info(msg="生成前端镜像成功:{0}:{1}".format(tag, version))
                 self.docker_image_push(repository="{0}:{1}".format(tag, version))
                 RecodeLog.info(msg="推送前端镜像成功:{0}:{1}".format(tag, version))
+                self.docker_local_image_remove(image_name="{0}:{1}".format(tag, version))
+                RecodeLog.info(msg="删除镜像成功：{0}:{1}".format(tag, version))
             except Exception as error:
                 RecodeLog.error("执行编译异常，原因：{0}".format(error))
                 return False
