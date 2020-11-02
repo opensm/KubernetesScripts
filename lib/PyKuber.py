@@ -807,7 +807,8 @@ class PyKuber:
         headers = {'Content-Type': 'application/json'}
         timestamps = long(round(time.time() * 1000))
         url = "https://oapi.dingtalk.com/robot/send?access_token={0}".format(
-            DINGDING_TOKEN)  # 说明：这里改为自己创建的机器人的webhook的值
+            DINGDING_TOKEN
+        )  # 说明：这里改为自己创建的机器人的webhook的值
         secret_enc = bytes(DINGDING_SECRET).encode('utf-8')
         to_sign = '{}\n{}'.format(timestamps, DINGDING_SECRET)
         to_sign_enc = bytes(to_sign).encode('utf-8')
